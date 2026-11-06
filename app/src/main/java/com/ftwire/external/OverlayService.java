@@ -14,6 +14,7 @@ import android.view.Gravity;
 import android.view.WindowManager;
 
 public class OverlayService extends Service {
+
     private WindowManager wm;
     private FloatingMenu menu;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -23,8 +24,10 @@ public class OverlayService extends Service {
     public void onCreate() {
         super.onCreate();
         startForeground(1, notif());
+
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         menu = new FloatingMenu(this);
+
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -32,13 +35,16 @@ public class OverlayService extends Service {
                         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
                         WindowManager.LayoutParams.TYPE_PHONE,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE |
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT);
+                PixelFormat.TRANSLUCENT
+        );
         p.gravity = Gravity.TOP | Gravity.START;
         wm.addView(menu, p);
+
         run = true;
         NativeBridge.init();
+        // varsayılan config
+        NativeBridge.setConfig(true, true, false, true, 140f, 250f, false);
         tick();
     }
 
@@ -52,9 +58,10 @@ public class OverlayService extends Service {
     private Notification notif() {
         String id = "ftwire";
         if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel c = new NotificationChannel(id, "F-T Wire",
-                    NotificationManager.IMPORTANCE_LOW);
-            ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(c);
+            NotificationChannel c = new NotificationChannel(
+                    id, "F-T Wire", NotificationManager.IMPORTANCE_LOW);
+            ((NotificationManager) getSystemService(NOTIFICATION_SERVICE))
+                    .createNotificationChannel(c);
         }
         return new Notification.Builder(this, id)
                 .setContentTitle("F-T Wire")
@@ -67,11 +74,15 @@ public class OverlayService extends Service {
     public void onDestroy() {
         run = false;
         h.removeCallbacksAndMessages(null);
-        if (menu != null) wm.removeView(menu);
+        if (menu != null && wm != null) {
+            try { wm.removeView(menu); } catch (Exception ignored) {}
+        }
         NativeBridge.shutdown();
         super.onDestroy();
     }
 
     @Override
-    public IBinder onBind(Intent i) { return null; }
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
 }

@@ -16,6 +16,8 @@ public class FloatingMenu extends View {
     private final Paint menuText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint btnPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint btnText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint accent = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private float menuX = 50f, menuY = 200f;
     private float touchX, touchY;
@@ -34,6 +36,10 @@ public class FloatingMenu extends View {
     private final float pad = 16f;
     private final float titleH = 50f;
 
+    // kapalı kutu boyutu
+    private final float closedW = 120f;
+    private final float closedH = 52f;
+
     public FloatingMenu(Context c) {
         super(c);
         setBackgroundColor(Color.TRANSPARENT);
@@ -42,7 +48,7 @@ public class FloatingMenu extends View {
         boxPaint.setStrokeWidth(2.8f);
         barPaint.setStyle(Paint.Style.FILL);
 
-        menuBg.setColor(0xF0111111);
+        menuBg.setColor(0xF0121212);
         menuBg.setStyle(Paint.Style.FILL);
 
         menuText.setColor(0xFF00FF88);
@@ -53,11 +59,17 @@ public class FloatingMenu extends View {
         btnText.setColor(Color.WHITE);
         btnText.setTextSize(26f);
         btnText.setTextAlign(Paint.Align.CENTER);
+
+        accent.setColor(0xFF00FF88);
+        accent.setStyle(Paint.Style.FILL);
+
+        shadow.setColor(0x66000000);
+        shadow.setStyle(Paint.Style.FILL);
     }
 
     @Override
     protected void onDraw(Canvas c) {
-        // ESP
+        // ===== ESP =====
         float[] d = NativeBridge.getDrawData();
         if (d != null && d.length > 0) {
             int n = (int) d[0];
@@ -82,19 +94,22 @@ public class FloatingMenu extends View {
         }
 
         if (!menuOpen) {
-            // küçük aç butonu
-            btnPaint.setColor(0xFF00AA55);
-            c.drawRoundRect(new RectF(menuX, menuY, menuX + 110, menuY + 48), 14, 14, btnPaint);
-            btnText.setTextSize(24f);
-            c.drawText("MENU", menuX + 55, menuY + 32, btnText);
+            drawClosedButton(c);
             return;
         }
 
-        // menü arka plan
+        // gölge
+        c.drawRoundRect(new RectF(menuX + 4, menuY + 6, menuX + menuW + 4, menuY + menuH + 6), 18, 18, shadow);
+
+        // arka plan
         c.drawRoundRect(new RectF(menuX, menuY, menuX + menuW, menuY + menuH), 18, 18, menuBg);
 
+        // sol accent çizgi
+        accent.setColor(0xFF00FF88);
+        c.drawRoundRect(new RectF(menuX, menuY, menuX + 6, menuY + menuH), 4, 4, accent);
+
         // başlık
-        c.drawText("F-T Wire", menuX + pad, menuY + 38, menuText);
+        c.drawText("F-T Wire", menuX + pad + 8, menuY + 38, menuText);
 
         float y = menuY + titleH + 8;
         drawBtn(c, "ESP Box", espBox, y); y += btnH + 10;
@@ -110,10 +125,30 @@ public class FloatingMenu extends View {
         c.drawText("Kapat", menuX + menuW / 2f, y + 34, btnText);
     }
 
+    private void drawClosedButton(Canvas c) {
+        // gölge
+        c.drawRoundRect(new RectF(menuX + 3, menuY + 4, menuX + closedW + 3, menuY + closedH + 4), 14, 14, shadow);
+
+        // arka plan koyu
+        btnPaint.setColor(0xF0181818);
+        c.drawRoundRect(new RectF(menuX, menuY, menuX + closedW, menuY + closedH), 14, 14, btnPaint);
+
+        // sol yeşil şerit
+        accent.setColor(0xFF00FF88);
+        c.drawRoundRect(new RectF(menuX, menuY, menuX + 7, menuY + closedH), 4, 4, accent);
+
+        // yazı
+        btnText.setTextSize(22f);
+        btnText.setColor(0xFF00FF88);
+        c.drawText("F-T", menuX + closedW / 2f + 4, menuY + 34, btnText);
+        btnText.setColor(Color.WHITE);
+    }
+
     private void drawBtn(Canvas c, String label, boolean on, float y) {
-        btnPaint.setColor(on ? 0xFF00AA55 : 0xFF333333);
+        btnPaint.setColor(on ? 0xFF00AA55 : 0xFF2A2A2A);
         c.drawRoundRect(new RectF(menuX + pad, y, menuX + menuW - pad, y + btnH), 12, 12, btnPaint);
         btnText.setTextSize(26f);
+        btnText.setColor(Color.WHITE);
         c.drawText(label + (on ? "  ON" : "  OFF"), menuX + menuW / 2f, y + 34, btnText);
     }
 
@@ -122,10 +157,7 @@ public class FloatingMenu extends View {
         float x = e.getRawX();
         float y = e.getRawY();
 
-        // menü dışında dokunuş → oyuna bırak
-        if (!hitMenu(x, y)) {
-            return false;
-        }
+        if (!hitMenu(x, y)) return false;
 
         switch (e.getAction()) {
             case MotionEvent.ACTION_DOWN:
@@ -139,7 +171,6 @@ public class FloatingMenu extends View {
                     return true;
                 }
 
-                // buton tıklama hesapla
                 float localY = y - menuY;
                 float start = titleH + 8;
 
@@ -165,9 +196,8 @@ public class FloatingMenu extends View {
                     menuY += y - touchY;
                     touchX = x;
                     touchY = y;
-                    // ekran dışına kaçmasın
-                    menuX = Math.max(0, Math.min(menuX, getWidth() - 80));
-                    menuY = Math.max(0, Math.min(menuY, getHeight() - 80));
+                    menuX = Math.max(0, Math.min(menuX, getWidth() - 60));
+                    menuY = Math.max(0, Math.min(menuY, getHeight() - 60));
                     invalidate();
                 }
                 return true;
@@ -182,7 +212,7 @@ public class FloatingMenu extends View {
 
     private boolean hitMenu(float x, float y) {
         if (!menuOpen) {
-            return x >= menuX && x <= menuX + 110 && y >= menuY && y <= menuY + 48;
+            return x >= menuX && x <= menuX + closedW && y >= menuY && y <= menuY + closedH;
         }
         return x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH;
     }

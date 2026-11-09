@@ -5,97 +5,87 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.WindowManager;
 
 public class OverlayService extends Service {
 
-    private WindowManager windowManager;
-    private FloatingMenu floatingMenu;
-    private Handler handler;
-    private static final int NOTIF_ID = 1;
-    private static final String CHANNEL_ID = "ftwire";
+    private WindowManager wm;
+    private FloatingMenu menu;
+    private final Handler h = new Handler(Looper.getMainLooper());
+    private boolean run;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        startForegroundNotification();
-        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
-        floatingMenu = new FloatingMenu(this);
+        startForeground(1, notif());
 
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            // FIX: FLAG_NOT_FOCUSABLE keeps touches passing through,
-            //      FLAG_LAYOUT_IN_SCREEN + FLAG_LAYOUT_NO_LIMITS anchors
-            //      coordinate space to raw screen origin (top-left = 0,0),
-            //      eliminating the status-bar Y offset bug.
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            android.graphics.PixelFormat.TRANSLUCENT
+        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        menu = new FloatingMenu(this);
+
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                Build.VERSION.SDK_INT >= 26 ?
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
+                        WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT
         );
-        lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
-        lp.x = 0;
-        lp.y = 0;
+        p.gravity = Gravity.TOP | Gravity.START;
+        p.x = 0;
+        p.y = 0;
+        wm.addView(menu, p);
 
-        windowManager.addView(floatingMenu, lp);
-
+        run = true;
         NativeBridge.init();
-        handler = new Handler(Looper.getMainLooper());
-        scheduleTick();
+        NativeBridge.setConfig(true, true, false, true, 140f, 250f, false);
+        tick();
     }
 
-    private void scheduleTick() {
-        handler.postDelayed(tick, 16); // ~60fps
+    private void tick() {
+        if (!run) return;
+        NativeBridge.update();
+        menu.invalidate();
+        h.postDelayed(this::tick, 16);
     }
 
-    private final Runnable tick = new Runnable() {
-        @Override
-        public void run() {
-            if (floatingMenu != null) {
-                floatingMenu.update(NativeBridge.getDrawData());
-                floatingMenu.invalidate();
-            }
-            scheduleTick();
+    private Notification notif() {
+        String id = "ftwire";
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel c = new NotificationChannel(
+                    id, "F-T Wire", NotificationManager.IMPORTANCE_LOW);
+            ((NotificationManager) getSystemService(NOTIFICATION_SERVICE))
+                    .createNotificationChannel(c);
         }
-    };
+        return new Notification.Builder(this, id)
+                .setContentTitle("F-T Wire")
+                .setContentText("External active")
+                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .build();
+    }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        return START_STICKY;
+    public void onDestroy() {
+        run = false;
+        h.removeCallbacksAndMessages(null);
+        if (menu != null && wm != null) {
+            try { wm.removeView(menu); } catch (Exception ignored) {}
+        }
+        NativeBridge.shutdown();
+        super.onDestroy();
     }
 
     @Override
     public IBinder onBind(Intent intent) {
         return null;
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        NativeBridge.shutdown();
-        if (handler != null) handler.removeCallbacksAndMessages(null);
-        if (floatingMenu != null && windowManager != null) {
-            windowManager.removeView(floatingMenu);
-        }
-    }
-
-    private void startForegroundNotification() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel ch = new NotificationChannel(
-                CHANNEL_ID, "F-T Wire", NotificationManager.IMPORTANCE_LOW);
-            getSystemService(NotificationManager.class).createNotificationChannel(ch);
-        }
-        Notification notif = new Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("F-T Wire")
-            .setContentText("External active")
-            .setSmallIcon(android.R.drawable.ic_menu_view)
-            .build();
-        startForeground(NOTIF_ID, notif);
     }
 }
